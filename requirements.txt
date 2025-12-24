@@ -1,0 +1,3 @@
+# requirements for NewScoreboard
+# This project uses only Python standard library modules (Tkinter, socket, threading, etc.).
+# If you add third-party packages, list them here one per line.
