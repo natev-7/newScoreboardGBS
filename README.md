@@ -8,7 +8,7 @@ Open a Windows Command Prompt.
 Navigate to location of executable.
 Example for RTD serial command for COM23:
 ```
-gbs-swim-scoreboard --port COM23
+gbs-swim-scoreboard.exe --port COM23
 ```
 
 ## Development
