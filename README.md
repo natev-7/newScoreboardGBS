@@ -16,6 +16,15 @@ python scoreboard_ui.py --demo
 python scoreboard_ui.py --port 3000
 ```
 
+## Running standalone Windows 11 executable
+Open a Windows Command Prompt.
+Navigate to location of executable.
+Example for RTD serial command for COM23:
+```
+gbs-swim-scoreboard -h
+gbs-swim-scoreboard --port COM23
+```
+
 Notes
 
 - Requires Python 3 and Tkinter (standard on most Python installs).
