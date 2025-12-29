@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import font
 import serial
 import threading
+import sys
+import time
 
 LANE_COUNT = 8
 
@@ -19,17 +21,29 @@ class SwimScoreboard(tk.Tk):
         self.bind('<Configure>', self._on_resize)
 
     def _build_ui(self):
+        # Event Name on its own line, aligned left
+        event_name_frame = tk.Frame(self, bg="#ffffff")
+        event_name_frame.pack(pady=(0, 0), fill="x")
+        self.event_name_label = tk.Label(
+            event_name_frame,
+            text="",
+            font=self.header_font,
+            fg="#002366",
+            bg="#ffffff",
+            anchor="w",           # Align text to the left
+            justify="left"        # Justify left for multi-line (if needed)
+        )
+        self.event_name_label.pack(side="left", padx=(0, 0), fill="x", expand=True)
+
         # Event, Heat, and Clock on same line
         top_frame = tk.Frame(self, bg="#ffffff")
-        top_frame.pack(pady=(20, 0), fill="x")
-        self.event_label_label = tk.Label(top_frame, text="Event", font=self.header_font, fg="#002366", bg="#ffffff")
+        top_frame.pack(pady=(0, 0), fill="x")
+        self.event_label_label = tk.Label(top_frame, text="Event:", font=self.header_font, fg="#002366", bg="#ffffff")
         self.event_label_label.pack(side="left", padx=(0, 5))
         self.event_label = tk.Label(top_frame, text="1", font=self.header_font, fg="#002366", bg="#ffffff")
         self.event_label.pack(side="left", padx=(0, 20))
         self.heat_label = tk.Label(top_frame, text="Heat: 1", font=self.header_font, fg="#002366", bg="#ffffff")
         self.heat_label.pack(side="left", padx=(0, 20))
-        self.event_name_label = tk.Label(top_frame, text="", font=self.header_font, fg="#002366", bg="#ffffff")
-        self.event_name_label.pack(side="left", padx=(0, 20))
         self.clock_label = tk.Label(top_frame, text="", font=self.header_font, fg="#002366", bg="#ffffff")
         self.clock_label.pack(side="left", padx=(0, 20))
 
@@ -38,12 +52,14 @@ class SwimScoreboard(tk.Tk):
         header_frame.pack(fill="x", padx=40)
         tk.Label(header_frame, text="Lane", font=self.custom_font, fg="#002366", bg="#e6e6e6", width=6).grid(row=0, column=0, sticky="ew")
         tk.Label(header_frame, text="Name", font=self.custom_font, fg="#002366", bg="#e6e6e6", width=18).grid(row=0, column=1, sticky="ew")
-        tk.Label(header_frame, text="Time", font=self.custom_font, fg="#002366", bg="#e6e6e6", width=10).grid(row=0, column=2, sticky="ew")
-        tk.Label(header_frame, text="Place", font=self.custom_font, fg="#002366", bg="#e6e6e6", width=6).grid(row=0, column=3, sticky="ew")
+        tk.Label(header_frame, text="Team", font=self.custom_font, fg="#002366", bg="#e6e6e6", width=8).grid(row=0, column=2, sticky="ew")
+        tk.Label(header_frame, text="Time", font=self.custom_font, fg="#002366", bg="#e6e6e6", width=10).grid(row=0, column=3, sticky="ew")
+        tk.Label(header_frame, text="Place", font=self.custom_font, fg="#002366", bg="#e6e6e6", width=6).grid(row=0, column=4, sticky="ew")
         header_frame.grid_columnconfigure(0, weight=1)
         header_frame.grid_columnconfigure(1, weight=3)
         header_frame.grid_columnconfigure(2, weight=2)
-        header_frame.grid_columnconfigure(3, weight=1)
+        header_frame.grid_columnconfigure(3, weight=2)
+        header_frame.grid_columnconfigure(4, weight=1)
 
         # Lane rows
         self.lane_rows = []
@@ -55,17 +71,20 @@ class SwimScoreboard(tk.Tk):
             row_frame.grid(row=lane-1, column=0, sticky="nsew", padx=40, pady=0)
             lane_label = tk.Label(row_frame, text=str(lane), font=self.custom_font, fg="#002366", bg="#ffffff", width=6)
             lane_label.grid(row=0, column=0, sticky="ew")
-            name_label = tk.Label(row_frame, text=f"Swimmer {lane}", font=self.custom_font, fg="#002366", bg="#ffffff", width=18)
+            name_label = tk.Label(row_frame, text=f"Swimmer {lane}", font=self.custom_font, fg="#002366", bg="#ffffff", width=18, anchor="w", justify="left")
             name_label.grid(row=0, column=1, sticky="ew")
+            team_label = tk.Label(row_frame, text="-", font=self.custom_font, fg="#002366", bg="#ffffff", width=8, anchor="w", justify="left")
+            team_label.grid(row=0, column=2, sticky="ew")
             time_label = tk.Label(row_frame, text="-", font=self.custom_font, fg="#002366", bg="#ffffff", width=10)
-            time_label.grid(row=0, column=2, sticky="ew")
+            time_label.grid(row=0, column=3, sticky="ew")
             place_label = tk.Label(row_frame, text="-", font=self.custom_font, fg="#002366", bg="#ffffff", width=6)
-            place_label.grid(row=0, column=3, sticky="ew")
+            place_label.grid(row=0, column=4, sticky="ew")
             row_frame.grid_columnconfigure(0, weight=1)
             row_frame.grid_columnconfigure(1, weight=3)
             row_frame.grid_columnconfigure(2, weight=2)
-            row_frame.grid_columnconfigure(3, weight=1)
-            self.lane_rows.append((name_label, time_label, place_label))
+            row_frame.grid_columnconfigure(3, weight=2)
+            row_frame.grid_columnconfigure(4, weight=1)
+            self.lane_rows.append((name_label, team_label, time_label, place_label))
             self.lane_row_frames.append(row_frame)
         self.lane_rows_container.grid_columnconfigure(0, weight=1)
 
@@ -84,11 +103,13 @@ class SwimScoreboard(tk.Tk):
     def update_heat(self, heat_num):
         self.heat_label.config(text=f"Heat: {heat_num}")
 
-    def update_lane(self, lane, name=None, time=None, place=None):
+    def update_lane(self, lane, name=None, team=None, time=None, place=None):
         if 1 <= lane <= LANE_COUNT:
-            name_label, time_label, place_label = self.lane_rows[lane-1]
+            name_label, team_label, time_label, place_label = self.lane_rows[lane-1]
             if name is not None:
                 name_label.config(text=name)
+            if team is not None:
+                team_label.config(text=team)
             if time is not None:
                 time_label.config(text=time)
             if place is not None:
@@ -111,7 +132,7 @@ class SwimScoreboard(tk.Tk):
                 for row_frame in self.lane_row_frames:
                     row_frame.configure(height=row_height)
 
-    def start_serial(self, port='COM1', baudrate=19200, itf_path='OS2-Swimming.itf'):
+    def start_serial(self, port='COM1', baudrate=19200, itf_path='OS2-Swimming.itf', test_file=None):
         parser = OS2FrameParser(itf_path)
         def on_frame(frame):
             # Update event and heat
@@ -127,24 +148,55 @@ class SwimScoreboard(tk.Tk):
             # Update lanes
             for lane in range(1, LANE_COUNT+1):
                 name = frame.get(f'Line {lane} Swimmer Name', '')
+                team = frame.get(f'Line {lane} Team Name', '')
                 time = frame.get(f'Line {lane} Split/Finish Time', '')
                 place = frame.get(f'Line {lane} Place Number', '')
-                self.update_lane(lane, name=name, time=time, place=place)
+                self.update_lane(lane, name=name, team=team, time=time, place=place)
         def on_data(data):
             # print(f"on_data called with data: {data}, len={len(data)}")
             if len(data) == 9:
-                self.clock_label.config(text=f"Time: {data.strip()}")
-            elif len(data) == 36:
-                print(f'{data}')
-                print(f"Processing name update data: {data[0:20]} {data[20:24]}")
-                name = data[0:20].strip()
-                lane = int(data[20:24].strip())
-                print(f"Received name update: lane={lane}, name={name}")
-                self.update_lane(lane, name=name, time="", place="")
+                time = data.strip()
+                if (time != '0.00'):
+                    self.clock_label.config(text=f"Time: {data.strip()}")
+                if (time == '0.0'): # Start of new race, clear scoreboard data
+                    self.event_name_label.config(text="")
+                    self.event_label.config(text="")
+                    self.heat_label.config(text="Heat: ")
+                    for lane in range(1, LANE_COUNT+1):
+                        self.update_lane(lane, name="-", time="-", place="-")
+            elif len(data) == 29: # Event[4],Heat[2],Notused[21],Length=[2]
+                event_num = data[0:4].strip()
+                heat_num = data[4:6].strip()
+                print(f"Received event/heat/time update: event={event_num}, heat={heat_num}")
+                if event_num:
+                    self.event_label.config(text=event_num)
+                if heat_num:
+                    self.heat_label.config(text=f"Heat: {heat_num}")
+            elif len(data) == 30: # Event name update
+                event_name = data.strip()
+                print(f"Received event name update: {event_name}")
+                # Only update if existing event name is not blank
+                if not self.event_name_label.cget("text"):
+                    self.event_name_label.config(text=event_name)
+            elif len(data) == 36: # Name[15],Team[5],Lane[2],Place[3],Split/FinishTime[9],Completed[2]
+                print(f"Processing lane update data: {data[0:20]} {data[20:24]}")
+                name = data[0:15].strip()
+                # name = name if name else None
+                team = data[15:20].strip()
+                lane = data[20:22].strip()
+                lane = int(lane) if lane.isdigit() else None
+                place = data[22:25].strip()
+                # place = place if place else None
+                time = data[25:34].strip()
+                # time = time if time and time != '0.00' else None
+                time = time if time != '0.00' else None
+                print(f"Received lane update: lane={lane}, name={name}, place={place}, time={time}")
+                if (lane is not None):
+                    self.update_lane(lane, name=name, team=team, time=time, place=place)
             else:
                 print(f"Unprocessed data: {data}, len={len(data)}")
 
-        self.serial_receiver = SerialReceiver(port, baudrate, parser, lambda frame: self.after(0, on_frame, frame), lambda data: self.after(0, on_data, data))
+        self.serial_receiver = SerialReceiver(port, baudrate, parser, lambda frame: self.after(0, on_frame, frame), lambda data: self.after(0, on_data, data), test_file=test_file)
         self.serial_receiver.start()
 
 class OS2FrameParser:
@@ -186,8 +238,10 @@ class OS2FrameParser:
         return result
 
 class SerialReceiver:
-    def __init__(self, port, baudrate, parser, on_frame, on_data):
-        self.ser = serial.Serial(port, baudrate, timeout=1)
+    def __init__(self, port, baudrate, parser, on_frame, on_data, test_file=None):
+        self.test_file = test_file
+        if not test_file:
+            self.ser = serial.Serial(port, baudrate, timeout=1)
         self.parser = parser
         self.on_frame = on_frame
         self.on_data = on_data
@@ -200,53 +254,81 @@ class SerialReceiver:
 
     def stop(self):
         self.running = False
-        self.ser.close()
+        if hasattr(self, 'ser'):
+            self.ser.close()
 
     def _read_loop(self):
         buffer = b''
         STX = 0x02
         ETX = 0x04
         with open('serial_log.bin', 'ab') as log_file:
-            while self.running:
-                try:
-                    data = self.ser.read(256)
-                    if not data:
-                        continue
-                    log_file.write(data)
-                    log_file.flush()
-                    buffer += data
-                    # print(f"New data received: {data}")
-                    while True:
-                        start = buffer.find(bytes([STX]))
-                        end = buffer.find(bytes([ETX]), start + 1)
-                        if start != -1 and end != -1 and end > start:
-                            frame = buffer[start + 1:end]
-                            buffer = buffer[end + 1:]
-                            # print(f"Received data: {frame}, len={len(frame)}")
-                            if len(frame) == self.parser.frame_length:
-                                try:
-                                    parsed = self.parser.parse_frame(frame)
-                                    self.on_frame(parsed)
-                                except Exception as e:
-                                    print(f"Frame parse error: {e}")
-                            else:
-                                temp = frame.decode(errors='ignore')
-                                print(f'Time: {temp}')
-                                self.on_data(temp)
-                        else:
-                            # No complete frame found yet
-                            # Optionally trim buffer if it grows too large
-                            if len(buffer) > 4096:
-                                buffer = buffer[-4096:]
+            if self.test_file:
+                with open(self.test_file, 'rb') as f:
+                    while self.running:
+                        byte = f.read(1)
+                        if not byte:
                             break
-                except Exception as e:
-                    print(f"Serial read error: {e}")
+                        log_file.write(byte)
+                        log_file.flush()
+                        buffer += byte
+                        time.sleep(0.001)
+                        while True:
+                            start = buffer.find(bytes([STX]))
+                            end = buffer.find(bytes([ETX]), start + 1)
+                            if start != -1 and end != -1 and end > start:
+                                frame = buffer[start + 1:end]
+                                buffer = buffer[end + 1:]
+                                if len(frame) == self.parser.frame_length:
+                                    try:
+                                        parsed = self.parser.parse_frame(frame)
+                                        self.on_frame(parsed)
+                                    except Exception as e:
+                                        print(f"Frame parse error: {e}")
+                                else:
+                                    temp = frame.decode(errors='ignore')
+                                    self.on_data(temp)
+                            else:
+                                if len(buffer) > 4096:
+                                    buffer = buffer[-4096:]
+                                break
+            else:
+                while self.running:
+                    try:
+                        data = self.ser.read(256)
+                        if not data:
+                            continue
+                        log_file.write(data)
+                        log_file.flush()
+                        buffer += data
+                        while True:
+                            start = buffer.find(bytes([STX]))
+                            end = buffer.find(bytes([ETX]), start + 1)
+                            if start != -1 and end != -1 and end > start:
+                                frame = buffer[start + 1:end]
+                                buffer = buffer[end + 1:]
+                                if len(frame) == self.parser.frame_length:
+                                    try:
+                                        parsed = self.parser.parse_frame(frame)
+                                        self.on_frame(parsed)
+                                    except Exception as e:
+                                        print(f"Frame parse error: {e}")
+                                else:
+                                    temp = frame.decode(errors='ignore')
+                                    self.on_data(temp)
+                            else:
+                                if len(buffer) > 4096:
+                                    buffer = buffer[-4096:]
+                                break
+                    except Exception as e:
+                        print(f"Serial read error: {e}")
 
 if __name__ == "__main__":
+    test_file = None
+    if len(sys.argv) > 1 and sys.argv[1] == "--test-file" and len(sys.argv) > 2:
+        test_file = sys.argv[2]
     app = SwimScoreboard()
-    # Uncomment and set the correct port to enable serial receiving
     try:
-        app.start_serial(port='COM23', baudrate=19200, itf_path='OS2-Swimming.itf')
+        app.start_serial(port='COM23', baudrate=19200, itf_path='OS2-Swimming.itf', test_file=test_file)
     except Exception as e:
         print(f"Error starting serial: {e}")
     # Example updates
