@@ -4,6 +4,7 @@ import serial
 import threading
 import sys
 import time
+import argparse
 
 LANE_COUNT = 8
 
@@ -159,27 +160,30 @@ class SwimScoreboard(tk.Tk):
                 if (time != '0.00'):
                     self.clock_label.config(text=f"Time: {data.strip()}")
                 if (time == '0.0'): # Start of new race, clear scoreboard data
+                    print("New event detected: Resetting scoreboard")
+                    print(f"{'-'*66}")
                     self.event_name_label.config(text="")
                     self.event_label.config(text="")
                     self.heat_label.config(text="Heat: ")
                     for lane in range(1, LANE_COUNT+1):
                         self.update_lane(lane, name="-", time="-", place="-")
             elif len(data) == 29: # Event[4],Heat[2],Notused[21],Length=[2]
+                print(f"Received event info update: '{data}'")
                 event_num = data[0:4].strip()
                 heat_num = data[4:6].strip()
-                print(f"Received event/heat/time update: event={event_num}, heat={heat_num}")
+                # print(f"Process event/heat/time update: event={event_num}, heat={heat_num}")
                 if event_num:
                     self.event_label.config(text=event_num)
                 if heat_num:
                     self.heat_label.config(text=f"Heat: {heat_num}")
             elif len(data) == 30: # Event name update
                 event_name = data.strip()
-                print(f"Received event name update: {event_name}")
+                print(f"Received event name update: '{data}'")
                 # Only update if existing event name is not blank
                 if not self.event_name_label.cget("text"):
                     self.event_name_label.config(text=event_name)
             elif len(data) == 36: # Name[15],Team[5],Lane[2],Place[3],Split/FinishTime[9],Completed[2]
-                print(f"Processing lane update data: {data[0:20]} {data[20:24]}")
+                print(f"Received lane update data: '{data}'")
                 name = data[0:15].strip()
                 # name = name if name else None
                 team = data[15:20].strip()
@@ -190,11 +194,11 @@ class SwimScoreboard(tk.Tk):
                 time = data[25:34].strip()
                 # time = time if time and time != '0.00' else None
                 time = time if time != '0.00' else None
-                print(f"Received lane update: lane={lane}, name={name}, place={place}, time={time}")
+                # print(f"Process lane update: lane={lane}, name={name}, place={place}, time={time}")
                 if (lane is not None):
                     self.update_lane(lane, name=name, team=team, time=time, place=place)
             else:
-                print(f"Unprocessed data: {data}, len={len(data)}")
+                print(f"Unprocessed data ({len(data)}): '{data}'")
 
         self.serial_receiver = SerialReceiver(port, baudrate, parser, lambda frame: self.after(0, on_frame, frame), lambda data: self.after(0, on_data, data), test_file=test_file)
         self.serial_receiver.start()
@@ -203,8 +207,8 @@ class OS2FrameParser:
     def __init__(self, itf_path):
         self.fields = self._parse_itf(itf_path)
         self.frame_length = sum(f['LENGTH'] for f in self.fields)
-        print(f"Parsed ITF with fields: {self.fields}")
-        print(f"Parsed ITF with frame length: {self.frame_length}")
+        # print(f"Parsed ITF with fields: {self.fields}")
+        # print(f"Parsed ITF with frame length: {self.frame_length}")
 
     def _parse_itf(self, path):
         fields = []
@@ -323,17 +327,16 @@ class SerialReceiver:
                         print(f"Serial read error: {e}")
 
 if __name__ == "__main__":
-    test_file = None
-    if len(sys.argv) > 1 and sys.argv[1] == "--test-file" and len(sys.argv) > 2:
-        test_file = sys.argv[2]
+    parser = argparse.ArgumentParser(description="Swim Scoreboard")
+    parser.add_argument('--test-file', type=str, help='Path to test input file (binary)')
+    parser.add_argument('--port', type=str, default='COM23', help='Serial port to use (default: COM23)')
+    parser.add_argument('--baudrate', type=int, default=19200, help='Serial baudrate (default: 19200)')
+    parser.add_argument('--itf', type=str, default='OS2-Swimming.itf', help='ITF file path (default: OS2-Swimming.itf)')
+    args = parser.parse_args()
+
     app = SwimScoreboard()
     try:
-        app.start_serial(port='COM23', baudrate=19200, itf_path='OS2-Swimming.itf', test_file=test_file)
+        app.start_serial(port=args.port, baudrate=args.baudrate, itf_path=args.itf, test_file=args.test_file)
     except Exception as e:
         print(f"Error starting serial: {e}")
-    # Example updates
-    # app.update_event(5)
-    # app.update_heat(2)
-    # app.update_lane(3, name="Alice Smith", time="56.78")
-    # app.update_lane(5, name="Bob Lee", time="54.32")
     app.mainloop()
