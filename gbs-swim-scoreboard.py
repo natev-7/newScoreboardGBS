@@ -212,8 +212,15 @@ class OS2FrameParser:
 
     def _parse_itf(self, path):
         fields = []
-        with open(path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
+        if not path:
+            print("No ITF path provided.")
+            return fields
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+        except Exception as e:
+            print(f"Error reading ITF file: {e}")
+            return []
         field = None
         for line in lines:
             line = line.strip()
@@ -331,7 +338,7 @@ if __name__ == "__main__":
     parser.add_argument('--test-file', type=str, help='Path to test input file (binary)')
     parser.add_argument('--port', type=str, default='COM23', help='Serial port to use (default: COM23)')
     parser.add_argument('--baudrate', type=int, default=19200, help='Serial baudrate (default: 19200)')
-    parser.add_argument('--itf', type=str, default='OS2-Swimming.itf', help='ITF file path (default: OS2-Swimming.itf)')
+    parser.add_argument('--itf', type=str, default='', help='ITF file path (default: None)')
     args = parser.parse_args()
 
     app = SwimScoreboard()
